@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>NP-Slicer — non-planar slicing workflow</title>
+<style>
+  :root { --bg:#12151a; --card:#1b2028; --line:#2c3442; --txt:#dbe2ec;
+          --dim:#8b97a8; --acc:#4da3ff; --ok:#39c46f; --bad:#ff5c5c;
+          --warn:#f0b429; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt);
+         font:15px/1.5 system-ui, Segoe UI, sans-serif; }
+  header { padding:18px 26px; border-bottom:1px solid var(--line); }
+  header h1 { margin:0; font-size:20px; }
+  header p { margin:4px 0 0; color:var(--dim); font-size:13px; }
+  main { max-width:1180px; margin:0 auto; padding:20px;
+         display:grid; grid-template-columns: 340px 1fr; gap:18px; }
+  .card { background:var(--card); border:1px solid var(--line);
+          border-radius:10px; padding:16px 18px; margin-bottom:16px; }
+  .card h2 { margin:0 0 10px; font-size:15px; }
+  label { display:block; font-size:12.5px; color:var(--dim);
+          margin:10px 0 3px; }
+  select, input[type=text] { width:100%; padding:7px 9px; border-radius:6px;
+          border:1px solid var(--line); background:#10141a;
+          color:var(--txt); font-size:14px; }
+  button { padding:9px 14px; border-radius:7px; border:0; cursor:pointer;
+           background:var(--acc); color:#fff; font-size:14px;
+           font-weight:600; }
+  button:disabled { background:#33404f; color:#7d8899; cursor:not-allowed; }
+  button.secondary { background:#2c3442; }
+  .stage { display:flex; gap:14px; align-items:flex-start; }
+  .stage .num { flex:0 0 34px; height:34px; border-radius:50%;
+                display:flex; align-items:center; justify-content:center;
+                font-weight:700; background:#2c3442; }
+  .stage.done .num { background:var(--ok); color:#08240f; }
+  .stage.running .num { background:var(--warn); color:#241a02; }
+  .stage.failed .num { background:var(--bad); }
+  .chip { display:inline-block; padding:2px 10px; border-radius:20px;
+          font-size:12px; font-weight:700; margin-left:8px;
+          background:#2c3442; color:var(--dim); vertical-align:2px; }
+  .chip.ok { background:var(--ok); color:#08240f; }
+  .chip.run { background:var(--warn); color:#241a02; }
+  .chip.fail { background:var(--bad); color:#fff; }
+  .echo { background:#10141a; border:1px dashed var(--line);
+          border-radius:7px; padding:8px 12px; margin:8px 0;
+          font-size:13px; color:var(--acc); }
+  .echo b { color:var(--txt); }
+  #modebox { display:none; background:#14202b; border:1px solid #2b4a66;
+             border-radius:8px; padding:9px 12px; margin:8px 0;
+             font-size:13px; }
+  #modebox b { color:var(--acc); }
+  #modebox.shear { background:#231f14; border-color:#5c522e; }
+  #modebox.shear b { color:var(--warn); }
+  #log { background:#0b0e12; border:1px solid var(--line); border-radius:8px;
+         padding:12px; height:430px; overflow-y:auto; white-space:pre-wrap;
+         font:12.5px/1.45 Consolas, monospace; color:#b9c4d4; }
+  #banner { display:none; padding:16px; border-radius:9px; text-align:center;
+            font-size:20px; font-weight:800; margin-bottom:14px; }
+  #banner.pass { display:block; background:var(--ok); color:#08240f; }
+  #banner.fail { display:block; background:var(--bad); color:#fff; }
+  .hint { font-size:12.5px; color:var(--dim); margin-top:6px; }
+  .filebox { border:1px dashed var(--acc); border-radius:8px; padding:10px;
+             margin-top:8px; font-size:13px; }
+  a.dl { color:var(--acc); font-weight:600; text-decoration:none;
+         margin-right:14px; }
+  img#preview { width:100%; border-radius:8px; border:1px solid var(--line);
+                margin-top:8px; display:none; }
+  .manual { background:#231f14; border:1px solid #5c522e; border-radius:8px;
+            padding:10px 12px; font-size:13px; margin:10px 0; }
+  .drop-zone { border:2px dashed #3a4656; border-radius:9px;
+               padding:22px 14px; text-align:center; cursor:pointer;
+               background:#10141a; transition:all .2s ease; }
+  .drop-zone:hover { border-color:var(--acc); background:#141b26; }
+  .drop-zone.dragover { border-color:var(--ok); background:#12211a; }
+  .drop-zone .dz-icon { font-size:1.9rem; }
+  .drop-zone h3 { margin:6px 0 2px; font-size:14px; }
+  .drop-zone p { margin:0; font-size:12px; color:var(--dim); }
+  .drop-zone input[type=file] { display:none; }
+  .err { color:var(--bad); font-size:12.5px; margin-top:6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>NP-Slicer — non-planar slicing workflow (Prusa MK4)</h1>
+  <p>field (shear <b>or</b> top mode, auto-selected) &rarr; warp &rarr;
+     <b>slice in PrusaSlicer (manual)</b> &rarr; unwarp &rarr; verify
+     &nbsp;·&nbsp; every stage shows exactly the inputs it received</p>
+</header>
+<main>
+  <!-- ---------------- left column: inputs ---------------- -->
+  <div>
+    <div class="card">
+      <h2>1 · Inputs</h2>
+      <div class="drop-zone" id="stlzone">
+        <div class="dz-icon">📐</div>
+        <h3>Upload part STL</h3>
+        <p>drag &amp; drop your <b>.stl</b> here or click to browse</p>
+        <input type="file" id="stlfile" accept=".stl">
+      </div>
+      <div class="hint" id="stlinfo"></div>
+      <label>…or pick an existing part (inputs/)</label>
+      <select id="stl"></select>
+      <label>Printer profile (npslicer/profiles/)</label>
+      <select id="printer"></select>
+      <div id="profinfo" class="hint"></div>
+      <div id="proferr" class="err"></div>
+      <label>Warp mode</label>
+      <select id="mode">
+        <option value="auto">auto — let stage 1 decide (recommended)</option>
+        <option value="shear">shear — layers follow the part's underside
+          through the whole thickness (swept / constant-thickness
+          parts)</option>
+        <option value="top">top — layers follow the part's top surface,
+          bending only the top blend zone (arbitrary geometry)</option>
+      </select>
+      <label>Max layer slope θ (deg) — blank = profile default</label>
+      <input type="text" id="theta_target" placeholder="e.g. 20">
+      <label>Clearance override (mm) — blank = profile value</label>
+      <input type="text" id="clearance" placeholder="e.g. 6">
+      <label>Blend factor (top mode) — blank = 2.5</label>
+      <input type="text" id="blend_factor" placeholder="2.5">
+      <label>Grid step (mm) — blank = 0.35</label>
+      <input type="text" id="grid_step" placeholder="0.35">
+      <label class="switch" style="display:flex;align-items:center;gap:8px;
+             margin-top:14px;color:var(--warn);">
+        <input type="checkbox" id="slope_override_on" style="width:auto;">
+        Override nozzle slope cap (experimental)
+      </label>
+      <div id="slope_override_row" style="display:none;">
+        <label>Max slope θ override: <b id="max_slope_val">15</b>°</label>
+        <input type="range" id="max_slope" min="6" max="45" step="1"
+               value="15" style="width:100%;">
+        <div class="hint">Bypasses the lateral tip-gouge / cone
+          <b>quality</b> cap so you can print steeper. Collision-clearance
+          safety is still enforced, and stage 4 downgrades the tip-gouge
+          check to a warning. Unchecked = caps enforced (normal). The 6°
+          flat-tip cap is a conservative, unverified estimate — measure
+          your nozzle's tip flat before trusting either value.</div>
+      </div>
+      <div class="hint">These are read the moment you press a stage
+        button and echoed back in the stage box — if you see your value
+        there, it was taken. Guaranteed.</div>
+    </div>
+    <div class="card">
+      <h2>Field preview</h2>
+      <img id="preview" alt="field preview">
+      <div class="hint" id="previewhint">appears after stage 1</div>
+    </div>
+  </div>
+
+  <!-- ---------------- right column: stages + log ---------------- -->
+  <div>
+    <div id="banner"></div>
+
+    <div class="card stage" id="s1">
+      <div class="num">1</div>
+      <div style="flex:1">
+        <h2>Build the warp field
+            <span class="chip" id="c1">pending</span></h2>
+        <div class="echo" id="e1" style="display:none"></div>
+        <div id="modebox"></div>
+        <button id="b1">Run stage 1 with the inputs on the left</button>
+        <div class="hint">Reads the STL, picks the warp mode (shown
+          above once decided — use the dropdown on the left to
+          override), builds the slope-limited field, runs all
+          self-checks. Watch the log for <b>MODE:</b> and
+          <b>Summary:</b>.</div>
+      </div>
+    </div>
+
+    <div class="card stage" id="s2">
+      <div class="num">2</div>
+      <div style="flex:1">
+        <h2>Warp the STL <span class="chip" id="c2">pending</span></h2>
+        <div class="echo" id="e2" style="display:none"></div>
+        <button id="b2" disabled>Run stage 2</button>
+        <span id="dl2" style="margin-left:10px"></span>
+        <div class="manual"><b>Then the one manual step:</b> download the
+          warped STL, slice it in the PrusaSlicer GUI (MK4 profile).
+          Do <b>not</b> move/rotate/scale it &nbsp;·&nbsp; relative E ON
+          &nbsp;·&nbsp; arc fitting OFF &nbsp;·&nbsp; wipe tower OFF
+          &nbsp;·&nbsp; <span id="supinstr">supports as needed (top
+          mode) / <b>supports OFF</b> (shear mode)</span>. Export the
+          G-code, then come back here.</div>
+      </div>
+    </div>
+
+    <div class="card stage" id="s3">
+      <div class="num">3</div>
+      <div style="flex:1">
+        <h2>Upload sliced G-code &amp; unwarp
+            <span class="chip" id="c3">pending</span></h2>
+        <div class="drop-zone" id="gzone">
+          <div class="dz-icon">📥</div>
+          <h3>Upload the sliced G-code</h3>
+          <p>drag &amp; drop the file you exported from PrusaSlicer, or
+             click to browse</p>
+          <input type="file" id="gfile" accept=".gcode,.gco,.g">
+        </div>
+        <div class="hint" id="upinfo">no file uploaded yet</div>
+        <label style="display:flex;align-items:center;gap:8px;
+               margin-top:10px;color:var(--txt);">
+          <input type="checkbox" id="np_supports" checked
+                 style="width:auto;">
+          NP supports (shear mode) — auto-generate supports under the
+          raised underside (off = underside prints unsupported)
+        </label>
+        <div class="echo" id="e3" style="display:none"></div>
+        <button id="b3" disabled style="margin-top:8px">Run stage 3
+          (unwarp)</button>
+        <span id="dl3" style="margin-left:10px"></span>
+      </div>
+    </div>
+
+    <div class="card stage" id="s4">
+      <div class="num">4</div>
+      <div style="flex:1">
+        <h2>Verify before printing
+            <span class="chip" id="c4">pending</span></h2>
+        <div class="echo" id="e4" style="display:none"></div>
+        <button id="b4" disabled>Run stage 4 (collision verification)</button>
+        <div class="hint">Simulates every move against the printhead
+          model — takes a few minutes on real files. Print only on
+          <b>VERIFICATION PASSED</b>.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Live log <span class="hint" id="runhint"></span></h2>
+      <div id="log">select a part, then press "Run stage 1"…</div>
+    </div>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let meta = {stls: [], profiles: []};
+let lastLogLen = 0;
+
+async function j(url, opts) {
+  const r = await fetch(url, opts);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || r.statusText);
+  return d;
+}
+
+async function refreshMeta(selectName) {
+  meta = await j('/api/meta');
+  $('stl').innerHTML = meta.stls.map(s =>
+    `<option value="${s.name}">${s.name}  (${s.dir})</option>`).join('');
+  if (selectName) $('stl').value = selectName;
+  $('printer').innerHTML = meta.profiles.map(p =>
+    `<option value="${p.name}">${p.label}</option>`).join('');
+  $('proferr').textContent = (meta.profile_errors || []).join(' | ');
+  profInfo();
+}
+
+async function init() {
+  await refreshMeta();
+  $('stl').onchange = selectPart;
+  $('printer').onchange = profInfo;
+  await selectPart();
+  wireDropZone('stlzone', 'stlfile', uploadStl);
+  wireDropZone('gzone', 'gfile', uploadGcode);
+  $('slope_override_on').onchange = () => {
+    $('slope_override_row').style.display =
+      $('slope_override_on').checked ? 'block' : 'none';
+  };
+  $('max_slope').oninput = () => {
+    $('max_slope_val').textContent = $('max_slope').value;
+  };
+  setInterval(poll, 900);
+}
+
+function wireDropZone(zoneId, inputId, handler) {
+  const z = $(zoneId), inp = $(inputId);
+  z.onclick = () => inp.click();
+  inp.onchange = () => { if (inp.files[0]) handler(inp.files[0]); };
+  z.ondragover = e => { e.preventDefault(); z.classList.add('dragover'); };
+  z.ondragleave = () => z.classList.remove('dragover');
+  z.ondrop = e => {
+    e.preventDefault(); z.classList.remove('dragover');
+    if (e.dataTransfer.files[0]) handler(e.dataTransfer.files[0]);
+  };
+}
+
+async function uploadStl(f) {
+  $('stlinfo').textContent = `uploading ${f.name} …`;
+  try {
+    const d = await j('/api/upload_stl?name=' + encodeURIComponent(f.name),
+                      {method: 'POST', body: await f.arrayBuffer()});
+    await refreshMeta(d.saved);
+    await selectPart();
+    $('stlinfo').innerHTML = `✔ <b>${d.saved}</b> uploaded — ` +
+      `${d.faces.toLocaleString()} triangles, ` +
+      `${d.size_mm[0]} × ${d.size_mm[1]} × ${d.size_mm[2]} mm — ` +
+      `selected below, press "Run stage 1"`;
+  } catch (err) { $('stlinfo').innerHTML = '✘ ' + err.message; }
+}
+
+function profInfo() {
+  const p = meta.profiles.find(x => x.name === $('printer').value);
+  $('profinfo').textContent = p ?
+    `cone ${p.cone}°, tip r ${p.tip_r} mm, clearance ${p.clearance} mm — edit npslicer/profiles/${p.name}.json to change` : '';
+}
+
+async function selectPart() {
+  if (!$('stl').value) {
+    log('no STL yet — drop one into the upload box above.');
+    return;
+  }
+  const d = await j('/api/select', {method: 'POST',
+    body: JSON.stringify({stl: $('stl').value})});
+  $('banner').className = ''; $('banner').style.display = 'none';
+  $('modebox').style.display = 'none';
+  log(`part selected: ${d.part}` +
+      (Object.keys(d.resumed).length ?
+       `  (found previous results for stage(s) ${Object.keys(d.resumed).join(', ')} — you can rerun or continue)` : ''));
+}
+
+function params() {
+  const o = {stl: $('stl').value, printer: $('printer').value};
+  if ($('mode').value !== 'auto') o.mode = $('mode').value;
+  for (const k of ['theta_target', 'clearance', 'blend_factor', 'grid_step'])
+    if ($(k).value.trim()) o[k] = $(k).value.trim();
+  // experimental overrides — only sent when explicitly enabled, so the
+  // default run is byte-for-byte the current behaviour
+  if ($('slope_override_on').checked) o.max_slope = $('max_slope').value;
+  if (!$('np_supports').checked) o.supports = 'off';
+  return o;
+}
+
+function echoText(p, stage) {
+  const bits = [`STL <b>${p.stl}</b>`, `profile <b>${p.printer}</b>`];
+  if (stage === 1)
+    bits.push(`mode <b>${p.mode || 'auto'}</b>`);
+  for (const [k, v] of Object.entries(p))
+    if (!['stl', 'printer', 'mode'].includes(k))
+      bits.push(`${k} <b>${v}</b>`);
+  return `inputs received for stage ${stage}: ` + bits.join(' · ');
+}
+
+async function run(stage) {
+  const p = params();
+  p.stage = stage;
+  try {
+    const d = await j('/api/run', {method: 'POST', body: JSON.stringify(p)});
+    const e = $('e' + stage);
+    e.style.display = 'block';
+    e.innerHTML = echoText(d.inputs_received, stage) + ' — <b>running…</b>';
+    if (stage === 4) { $('banner').className = ''; $('banner').style.display='none'; }
+  } catch (err) { alert(err.message); }
+}
+$('b1').onclick = () => run(1);
+$('b2').onclick = () => run(2);
+$('b3').onclick = () => run(3);
+$('b4').onclick = () => run(4);
+
+async function uploadGcode(f) {
+  $('upinfo').textContent = `uploading ${f.name} …`;
+  const part = stemOf($('stl').value);
+  try {
+    const d = await j('/api/upload?part=' + encodeURIComponent(part),
+                      {method: 'POST', body: await f.arrayBuffer()});
+    let supWarn = '';
+    if (d.support_gcode_lines > 0 && currentMode() === 'shear')
+      supWarn = ` — <b style="color:var(--bad)">contains PrusaSlicer
+        support material: shear mode needs supports OFF — re-slice!</b>`;
+    $('upinfo').innerHTML =
+      `✔ received <b>${f.name}</b> — ${d.lines.toLocaleString()} lines, ` +
+      `${d.layers} layers, relative-E ${d.relative_e_detected ? 'detected ✔' : '<b style="color:var(--bad)">NOT detected ✘ (enable it and re-export!)</b>'}` +
+      supWarn;
+    $('b3').disabled = false;
+  } catch (err) { $('upinfo').textContent = '✘ ' + err.message; }
+}
+
+function stemOf(name) {
+  return name.replace(/\.stl$/i, '').replace(/ /g, '_');
+}
+
+function setStage(n, state, chipTxt) {
+  const s = $('s' + n), c = $('c' + n);
+  s.className = 'card stage ' + state;
+  c.className = 'chip ' + (state === 'done' ? 'ok' :
+                state === 'running' ? 'run' :
+                state === 'failed' ? 'fail' : '');
+  c.textContent = chipTxt;
+}
+
+function log(line) {
+  const el = $('log');
+  el.textContent += (el.textContent ? '\n' : '') + line;
+  el.scrollTop = el.scrollHeight;
+}
+
+let modeLine = '';               // last "MODE: ..." line seen in the log
+function currentMode() {
+  if (modeLine.startsWith('MODE: shear')) return 'shear';
+  if (modeLine.startsWith('MODE: top')) return 'top';
+  return '';
+}
+
+async function poll() {
+  let st;
+  try { st = await j('/api/status'); } catch (e) { return; }
+  // log streaming
+  const joined = st.log.join('\n');
+  if (joined.length !== lastLogLen) {
+    $('log').textContent = joined;
+    $('log').scrollTop = $('log').scrollHeight;
+    lastLogLen = joined.length;
+  }
+  $('runhint').textContent = st.running ?
+    `— stage ${st.stage} running…` : '';
+  // MODE decision display (from the stage-1 log)
+  const m = st.log.find(l => l.startsWith('MODE:'));
+  if (m && m !== modeLine) {
+    modeLine = m;
+    const mb = $('modebox');
+    mb.style.display = 'block';
+    const shear = currentMode() === 'shear';
+    mb.className = shear ? 'shear' : '';
+    mb.innerHTML = `<b>${m}</b>` + (shear ?
+      `<br>⚠ SHEAR mode: slice with <b>PrusaSlicer supports OFF</b> —
+       stage 3 splices its own NP supports for the raised underside.` :
+      '');
+    $('supinstr').innerHTML = shear ?
+      '<b style="color:var(--warn)">supports OFF (shear mode — stage 3 adds its own)</b>' :
+      'supports as needed (top mode)';
+  }
+  // stage states
+  for (let n = 1; n <= 4; n++) {
+    if (st.running && st.stage === n) setStage(n, 'running', 'running…');
+    else if (st.done[String(n)]) setStage(n, 'done', 'done ✔');
+    else if (!st.running && st.stage === n && st.ok === false)
+      setStage(n, 'failed', 'failed ✘');
+    else setStage(n, '', 'pending');
+  }
+  // gating
+  $('b1').disabled = st.running;
+  $('b2').disabled = st.running || !st.done['1'];
+  $('b3').disabled = st.running || !st.done['2'] || !st.artifacts.uploaded;
+  $('b4').disabled = st.running || !st.done['3'];
+  // downloads + preview
+  $('dl2').innerHTML = st.artifacts.warped ?
+    `<a class="dl" href="/api/download?f=${st.artifacts.warped}">⬇ download warped STL</a>` : '';
+  $('dl3').innerHTML = st.artifacts.final ?
+    `<a class="dl" href="/api/download?f=${st.artifacts.final}">⬇ download FINAL non-planar G-code</a>` : '';
+  if (st.artifacts.preview) {
+    $('preview').src = '/api/download?f=' + st.artifacts.preview +
+                       '&t=' + (st.done['1'] ? 1 : Date.now());
+    $('preview').style.display = 'block';
+    $('previewhint').textContent = currentMode() === 'shear' ?
+      'T / bottom B / shear field S' : 'T / printable T~ / displacement D';
+  }
+  // verdict banner after stage 4
+  if (!st.running && st.stage === 4 && st.ok !== null) {
+    const pass = joined.includes('VERIFICATION PASSED');
+    const b = $('banner');
+    b.className = pass ? 'pass' : 'fail';
+    b.textContent = pass ?
+      '✔ VERIFICATION PASSED — safe to print' :
+      '✘ VERIFICATION FAILED — do NOT print; see the log';
+  }
+}
+init();
+</script>
+</body>
+</html>

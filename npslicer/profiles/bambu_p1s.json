@@ -1,0 +1,18 @@
+{
+  "name": "Bambu Lab P1S (0.4 nozzle, stock flat tip)",
+  "bed_x": 256.0,
+  "bed_y": 256.0,
+  "origin": "corner",
+  "nozzle_diameter": 0.4,
+  "filament_diameter": 1.75,
+  "nozzle_cone_angle_deg": 40.0,
+  "tip_land_radius": 0.95,
+  "gouge_tol_mm": 0.10,
+  "nonplanar_clearance_h": 3.5,
+  "shroud_radius": 9.0,
+  "head_clearance_h": 10.0,
+  "head_radius": 35.0,
+  "theta_target_default": 20.0,
+  "_comment_MEASURED": "nozzle_cone_angle_deg (40), tip_land_radius (0.95 = half of the 1.9 mm stock flat tip face), gouge_tol_mm (0.10) and nonplanar_clearance_h (3.5) are PHYSICALLY MEASURED on this exact P1S toolhead. With the flat tip these give a lateral conformal-slope cap of atan(0.10/0.95) = ~6 deg — the hardware wall for gentle non-planar on the stock P1S. Fit a pointed/high-flow nozzle (smaller tip_land_radius) to raise it, or use --max_slope to override for experimentation.",
+  "_comment_SPECULATIVE": "shroud_radius (9), head_clearance_h (10), head_radius (35) are windowed-clearance keys NOT yet measured on the P1S — placeholders. shroud_radius = lateral radius of the tip/sock/shroud within which nonplanar_clearance_h applies; head_radius/head_clearance_h = the far-field part-cooling-shroud footprint (nothing printed may stand taller than head_clearance_h within head_radius of the tip). Measure the P1S toolhead and edit these before trusting the windowed-clearance check; the stage-4 verifier uses them."
+}

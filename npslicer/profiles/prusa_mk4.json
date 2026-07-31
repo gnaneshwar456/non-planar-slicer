@@ -1,0 +1,17 @@
+{
+  "name": "Prusa MK4 (Nextruder, 0.4 nozzle)",
+  "bed_x": 250.0,
+  "bed_y": 210.0,
+  "origin": "corner",
+  "nozzle_diameter": 0.4,
+  "filament_diameter": 1.75,
+  "nozzle_cone_angle_deg": 30.0,
+  "tip_land_radius": 0.5,
+  "gouge_tol_mm": 0.15,
+  "nonplanar_clearance_h": 4.0,
+  "shroud_radius": 8.0,
+  "head_clearance_h": 10.0,
+  "head_radius": 35.0,
+  "theta_target_default": 20.0,
+  "_comment_MEASURE_ME": "SPECULATIVE defaults for the MK4 Nextruder \u2014 every number here is meant to be edited by hand after measuring the actual toolhead. nozzle_cone_angle_deg = max surface slope the nozzle/heater assembly can ride without touching printed material (Ahlers Fig.3): measure the angle from the tip to where the hotend/sock widens. tip_land_radius = HALF the flat face diameter around the orifice (Nextruder tips are fairly slim; 0.40 is a conservative guess \u2014 if it measures smaller, steeper conformal slopes unlock automatically via the pointed-tip formula). nonplanar_clearance_h = vertical distance from tip to the lowest other obstruction (fan duct / sock base); caps the max displacement depth D. head_clearance_h / head_radius = the far-field 'small angle, large distance' case: nothing printed may stand taller than head_clearance_h above the tip within head_radius laterally (fan shroud / extruder body footprint). theta_target_default = quality preference; it is always additionally clamped by the cone and lateral caps. shroud_radius = lateral radius of the nozzle tip/sock/shroud assembly around the orifice within which the nonplanar_clearance_h applies (windowed clearance: rise within this radius must stay under nonplanar_clearance_h); ~8 mm is a SPECULATIVE Nextruder guess."
+}
