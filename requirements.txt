@@ -1,0 +1,7 @@
+numpy
+trimesh
+scipy
+shapely
+matplotlib
+networkx
+rtree
